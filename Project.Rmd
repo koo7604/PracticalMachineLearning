@@ -1,0 +1,96 @@
+---
+title: "Practical Machine Learning Project"
+author: "Kohei Shima"
+date: "August 24, 2014"
+output: pdf_document
+---
+```{r, echo=FALSE,results='hide'}
+setwd("/Users/koo7604/Desktop/R/Johns_Hopkins/PracticalMachineLearning")
+```
+
+# Summary
+In this report, we examine how well we can quantify correct and incorrect exercise by collecting and analysing data from six participants performing barbell lifts in five ways. We conclude that we can detect it with very high accuracy by hiring random forest model. The model also tells us it is a bit easier to detect the correct activity than incorrect ones.
+
+# Data Loading
+The data provided are available [here](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv).
+```{r}
+if (!file.exists("./data/pml-testing.csv")){
+        download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv",
+                      "./data/pml-testing.csv")
+}
+df <- read.csv("./data/pml-training.csv", na.strings = c("NA", ""))
+```
+
+# Data Cleaning
+Let's take a look at dimensions of the data.
+```{r}
+dim(df)
+```
+This dataset comprises of 19,622 observations with one outcome and 159 attributes. Next, we devide this dataset into training (75%) and testing (25%) datasets.
+```{r}
+library(caret)
+inTrain = createDataPartition(y=df$classe, p=3/4)[[1]]
+trainSA = df[inTrain,]
+testSA = df[-inTrain,]
+```
+Many attribute columns have too many NAs. We want to delete such columns in order to conduct effective analyses.
+```{r}
+na_count = sapply(trainSA, function(x) sum(is.na(x)))
+table(na_count)
+```
+The almost all values in the 100 columns are NAs out of 14,718 values. We remove them and then see the structure of the training dataset.
+```{r}
+delete_columns = names(na_count[na_count==max(na_count)])
+trainSA = trainSA[, !names(trainSA) %in% delete_columns]
+testSA = testSA[, !names(testSA) %in% delete_columns]
+str(trainSA)
+```
+The first seven columns look irrelavant to the exercise we analyse, so these columns should be removed as well.
+```{r}
+trainSA <- trainSA[, -c(1:7)]; testSA <- testSA[, -c(1:7)]
+dim(trainSA)
+```
+Here we have gotten a tidy dataset.
+
+# Model
+We compare four popular models below based on their accuracy rates. Then, we choose the best model and see the result in the evaluation section.
+## random forest
+```{r}
+set.seed(12345)
+```
+```{r}
+library(randomForest)
+modelFit_rf <- randomForest(x = trainSA[,1:52], y= trainSA[,53], prox=TRUE)
+pred_rf <- predict(modelFit_rf, testSA)
+```
+
+## tree
+```{r}
+library(rpart)
+modelFit_tr <- rpart(classe~.,data=trainSA)
+pred_tr <- predict(modelFit_tr, testSA)
+```
+## linear regression
+```{r}
+library(stats)
+modelFit_lm <- lm(as.numeric(classe)~.,data=trainSA)
+pred_lm <- round(predict(modelFit_lm, testSA))
+```
+## naive Bayes
+```{r}
+library(e1071)
+modelFit_nb <- naiveBayes(trainSA[,1:52], trainSA[,53])
+pred_nb <- predict(modelFit_nb, testSA)
+```
+
+# Evaluation
+The accuracies are below.
+```{r}
+print(c(mean(pred_rf  == testSA$classe), mean(pred_tr  == testSA$classe),
+        mean(pred_lm  == as.numeric(testSA$classe)), mean(pred_nb== testSA$classe)))
+```
+The random forest model has the highest accuracy rate, which is above 99%. Thus, we conclude that the best model is the random forest and We estimate the out of sample error to be 0.0% from the testing dataset. Let's see the details of the random forest model.
+```{r}
+modelFit_rf
+```
+It says that the accuracy for predicting class A, the correct movement of barbell lifting, is higher than others. This indicates that the dataset can be better used to detect inaccurate exercise movement.
